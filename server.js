@@ -7,91 +7,282 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ================= DB =================
 mongoose
   .connect(process.env.MONGO_URL)
   .then(() => console.log("MongoDB Connected"))
   .catch(err => console.log(err));
 
-// ================= MODELS =================
+// ================= SCHEMAS =================
+
+// USERS (Manager + Salesperson)
 const User = mongoose.model("User", new mongoose.Schema({
   name: String,
   phone: String,
-  password: String
+  email: String,
+  organisation: String,
+  password: String,
+  role: String   // manager | salesperson
 }));
 
+// PRODUCTS (Inventory)
 const Product = mongoose.model("Product", new mongoose.Schema({
   name: String,
-  price: Number
+  price: Number,
+  quantity: Number,
+  createdBy: String   // managerId
 }));
 
+// SALES
 const Sale = mongoose.model("Sale", new mongoose.Schema({
   product_name: String,
   qty: Number,
   rate: Number,
-  total: Number
+  total: Number,
+  userId: String,
+  createdAt: { type: Date, default: Date.now }
 }));
 
-// ================= AUTH =================
-app.post("/login", async (req, res) => {
-  const user = await User.findOne(req.body);
-  res.json(user
-    ? { success: true, message: "Login successful" }
-    : { success: false, message: "Invalid login" }
-  );
-});
+// =================================================
+// ================= AUTH ===========================
+// =================================================
 
+// REGISTER
 app.post("/register", async (req, res) => {
+  const { phone, email } = req.body;
+
+  const exists = await User.findOne({
+    $or: [{ phone }, { email }]
+  });
+
+  if (exists) {
+    return res.json({
+      success: false,
+      message: "User already exists"
+    });
+  }
+
   await User.create(req.body);
-  res.json({ success: true, message: "Registered" });
+
+  res.json({
+    success: true,
+    message: "Registered successfully"
+  });
 });
 
-// ================= PRODUCTS =================
-app.post("/products", async (req, res) => {
+// LOGIN
+app.post("/login", async (req, res) => {
+  const { email, password, role } = req.body;
+
+  const user = await User.findOne({ email, password, role });
+
+  if (!user) {
+    return res.json({
+      success: false,
+      message: "Invalid credentials"
+    });
+  }
+
+  res.json({
+    success: true,
+    message: "Login successful",
+    user
+  });
+});
+
+// =================================================
+// ================= PROFILE ========================
+// =================================================
+
+// GET PROFILE (self or manager)
+app.get("/profile/:id", async (req, res) => {
+  const user = await User.findById(req.params.id);
+  res.json({ success: true, data: user });
+});
+
+// UPDATE PROFILE
+app.post("/update-profile", async (req, res) => {
+  const { userId, name, phone, email, organisation } = req.body;
+
+  await User.findByIdAndUpdate(userId, {
+    name,
+    phone,
+    email,
+    organisation
+  });
+
+  res.json({
+    success: true,
+    message: "Profile updated"
+  });
+});
+
+// CHANGE PASSWORD
+app.post("/change-password", async (req, res) => {
+  const { userId, password } = req.body;
+
+  await User.findByIdAndUpdate(userId, { password });
+
+  res.json({
+    success: true,
+    message: "Password changed"
+  });
+});
+
+// =================================================
+// ================= USERS (Manager only) ===========
+// =================================================
+
+// GET ALL SALESPERSONS (Manager)
+app.get("/users", async (req, res) => {
+  const { role } = req.query;
+
+  if (role !== "manager") {
+    return res.json({
+      success: false,
+      message: "Access denied"
+    });
+  }
+
+  const users = await User.find({ role: "salesperson" });
+  res.json({ success: true, data: users });
+});
+
+// =================================================
+// ================= PRODUCTS =======================
+// =================================================
+
+// ADD PRODUCT (Manager only)
+app.post("/add-product", async (req, res) => {
+  const { role } = req.body;
+
+  if (role !== "manager") {
+    return res.json({
+      success: false,
+      message: "Only manager can add products"
+    });
+  }
+
   await Product.create(req.body);
-  res.json({ success: true, message: "Product added" });
+
+  res.json({
+    success: true,
+    message: "Product added"
+  });
 });
 
+// GET PRODUCTS (All)
 app.get("/products", async (req, res) => {
-  res.json(await Product.find());
+  const data = await Product.find();
+  res.json({ success: true, data });
 });
 
-app.post("/products/delete/:id", async (req, res) => {
-  await Product.findByIdAndDelete(req.params.id);
+// DELETE PRODUCT (Manager only)
+app.post("/delete-product", async (req, res) => {
+  const { role, id } = req.body;
+
+  if (role !== "manager") {
+    return res.json({
+      success: false,
+      message: "Only manager can delete"
+    });
+  }
+
+  await Product.findByIdAndDelete(id);
   res.json({ success: true, message: "Product deleted" });
 });
 
-// ================= SALES =================
-app.post("/sales", async (req, res) => {
-  const { product_name, quantity, price, total } = req.body;
+// =================================================
+// ================= SALES ==========================
+// =================================================
+
+// SAVE SALE
+app.post("/save-sale", async (req, res) => {
+  const { product_name, quantity, price, userId } = req.body;
+
   await Sale.create({
     product_name,
     qty: quantity,
     rate: price,
-    total
+    total: quantity * price,
+    userId
   });
-  res.json({ success: true, message: "Sale saved" });
+
+  res.json({
+    success: true,
+    message: "Sale saved"
+  });
 });
 
+// GET SALES
 app.get("/sales", async (req, res) => {
-  res.json({ success: true, data: await Sale.find() });
+  const data = await Sale.find().sort({ _id: -1 });
+  res.json({ success: true, data });
 });
 
-app.post("/sales/delete/:id", async (req, res) => {
-  await Sale.findByIdAndDelete(req.params.id);
+// DELETE SALE
+app.post("/delete-sale", async (req, res) => {
+  await Sale.findByIdAndDelete(req.body.id);
   res.json({ success: true, message: "Sale deleted" });
 });
 
-app.post("/sales/update/:id", async (req, res) => {
-  const { product_name, qty, rate } = req.body;
-  await Sale.findByIdAndUpdate(req.params.id, {
+// UPDATE SALE
+app.post("/update-sale", async (req, res) => {
+  const { id, product_name, qty, rate } = req.body;
+
+  await Sale.findByIdAndUpdate(id, {
     product_name,
     qty,
     rate,
     total: qty * rate
   });
-  res.json({ success: true, message: "Sale updated" });
+
+  res.json({
+    success: true,
+    message: "Sale updated"
+  });
 });
 
+// =================================================
+// =============== FORGOT PASSWORD =================
+// =================================================
+
+// STEP 1: Check user exists
+app.post("/forgot-password", async (req, res) => {
+  const { email, role } = req.body;
+
+  const user = await User.findOne({ email, role });
+
+  if (!user) {
+    return res.json({
+      success: false,
+      message: "User not found"
+    });
+  }
+
+  res.json({
+    success: true,
+    message: "User verified",
+    userId: user._id
+  });
+});
+
+// STEP 2: Reset password
+app.post("/reset-password", async (req, res) => {
+  const { userId, newPassword } = req.body;
+
+  await User.findByIdAndUpdate(userId, {
+    password: newPassword
+  });
+
+  res.json({
+    success: true,
+    message: "Password reset successful"
+  });
+});
+
+
+// ================= SERVER =================
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () =>
   console.log("Server started on port", PORT)
