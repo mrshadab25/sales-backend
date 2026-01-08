@@ -173,8 +173,8 @@ app.post("/add-product", async (req, res) => {
 
 // GET PRODUCTS (All)
 app.get("/products", async (req, res) => {
-  const data = await Product.find();
-  res.json({ success: true, data });
+  const products = await Product.find();
+  res.json(products); // 🔥 DIRECT ARRAY
 });
 
 // DELETE PRODUCT (Manager only)
@@ -216,8 +216,8 @@ app.post("/save-sale", async (req, res) => {
 
 // GET SALES
 app.get("/sales", async (req, res) => {
-  const data = await Sale.find().sort({ _id: -1 });
-  res.json({ success: true, data });
+  const sales = await Sale.find().sort({ _id: -1 });
+  res.json(sales); // 🔥 DIRECT ARRAY
 });
 
 // DELETE SALE
