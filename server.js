@@ -95,10 +95,31 @@ app.post("/login", async (req, res) => {
 // =================================================
 
 // GET PROFILE (self or manager)
+const mongoose = require("mongoose");
+
 app.get("/profile/:id", async (req, res) => {
-  const user = await User.findById(req.params.id);
-  res.json(user);
+  const { id } = req.params;
+
+  // ✅ check valid Mongo ObjectId
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid user id"
+    });
+  }
+
+  const user = await User.findById(id);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found"
+    });
+  }
+
+  res.json(user); // 👈 direct user object (IMPORTANT)
 });
+
 
 // UPDATE PROFILE
 app.post("/update-profile", async (req, res) => {
