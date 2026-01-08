@@ -97,7 +97,7 @@ app.post("/login", async (req, res) => {
 // GET PROFILE (self or manager)
 app.get("/profile/:id", async (req, res) => {
   const user = await User.findById(req.params.id);
-  res.json({ success: true, data: user });
+  res.json(user);
 });
 
 // UPDATE PROFILE
