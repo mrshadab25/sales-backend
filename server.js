@@ -88,50 +88,37 @@ app.post("/register", async (req, res) => {
 
 // LOGIN
 app.post("/login", async (req, res) => {
-  try {
-    const { email, password, role } = req.body;
+  const { email, password } = req.body;
 
-    const user = await User.findOne({
-      email: email.toLowerCase(),
-      role
+  const user = await User.findOne({
+    email: email.toLowerCase()
+  });
+
+  if (!user) {
+    return res.json({
+      success: false,
+      message: "Invalid credentials (user not found)"
     });
-
-    if (!user) {
-      return res.json({
-        success: false,
-        message: "Invalid credentials"
-      });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    if (!isMatch) {
-      return res.json({
-        success: false,
-        message: "Invalid credentials"
-      });
-    }
-
-    const token = jwt.sign(
-      { id: user._id, role: user.role },
-      "SECRET_KEY",
-      { expiresIn: "7d" }
-    );
-
-    res.json({
-      success: true,
-      message: "Login successful",
-      token,
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: "Server error" });
   }
+
+  const isMatch = await bcrypt.compare(password, user.password);
+
+  if (!isMatch) {
+    return res.json({
+      success: false,
+      message: "Invalid credentials (password)"
+    });
+  }
+
+  res.json({
+    success: true,
+    message: "Login successful",
+    user: {
+      _id: user._id,
+      name: user.name,
+      role: user.role
+    }
+  });
 });
 
 // =================================================
