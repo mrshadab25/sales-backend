@@ -1,6 +1,9 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+
 
 const app = express();
 app.use(cors());
@@ -49,45 +52,86 @@ const Sale = mongoose.model("Sale", new mongoose.Schema({
 
 // REGISTER
 app.post("/register", async (req, res) => {
-  const { phone, email } = req.body;
+  try {
+    const { name, phone, email, organisation, password, role } = req.body;
 
-  const exists = await User.findOne({
-    $or: [{ phone }, { email }]
-  });
-
-  if (exists) {
-    return res.json({
-      success: false,
-      message: "User already exists"
+    const exists = await User.findOne({
+      $or: [{ phone }, { email: email.toLowerCase() }]
     });
+
+    if (exists) {
+      return res.json({
+        success: false,
+        message: "User already exists"
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await User.create({
+      name,
+      phone,
+      email: email.toLowerCase(),
+      organisation,
+      password: hashedPassword,
+      role
+    });
+
+    res.json({
+      success: true,
+      message: "Registered successfully"
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
   }
-
-  await User.create(req.body);
-
-  res.json({
-    success: true,
-    message: "Registered successfully"
-  });
 });
 
 // LOGIN
 app.post("/login", async (req, res) => {
-  const { email, password, role } = req.body;
+  try {
+    const { email, password, role } = req.body;
 
-  const user = await User.findOne({ email, password, role });
-
-  if (!user) {
-    return res.json({
-      success: false,
-      message: "Invalid credentials"
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+      role
     });
-  }
 
-  res.json({
-    success: true,
-    message: "Login successful",
-    user
-  });
+    if (!user) {
+      return res.json({
+        success: false,
+        message: "Invalid credentials"
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.json({
+        success: false,
+        message: "Invalid credentials"
+      });
+    }
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      "SECRET_KEY",
+      { expiresIn: "7d" }
+    );
+
+    res.json({
+      success: true,
+      message: "Login successful",
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 });
 
 // =================================================
@@ -95,7 +139,6 @@ app.post("/login", async (req, res) => {
 // =================================================
 
 // GET PROFILE (self or manager)
-const mongoose = require("mongoose");
 
 app.get("/profile/:id", async (req, res) => {
   const { id } = req.params;
